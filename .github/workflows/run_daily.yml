@@ -1,0 +1,29 @@
+name: 每日股票监控
+
+on:
+  schedule:
+    # 每天 15:00 UTC+8 = UTC 时间 07:00
+    - cron: '0 7 * * *'
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🛎️ 检出代码
+        uses: actions/checkout@v4
+
+      - name: 🐍 设置 Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 📦 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 🏃 运行股票脚本
+        run: python stock_profit.py
+        env:
+          SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
