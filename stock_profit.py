@@ -1,17 +1,19 @@
 # -*- coding: utf-8 -*-
 """
-股票盈利监控系统 - GitHub Actions 版
+股票盈利监控系统 - GitHub Actions 版 (SendCloud 升级版)
 ✅ 支持微信 + 精美 HTML 邮件双通知
+✅ 使用 SendCloud 提升邮件送达率
 ✅ 新增：当日盈利、历史数据记录
 """
 
 import requests
 import os
 import smtplib
-import json
-from datetime import datetime, timedelta
 from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from email.header import Header
+from datetime import datetime, timedelta
+import json
 
 # ================== 📌 股票配置 ==================
 STOCKS = {
@@ -26,7 +28,7 @@ STOCKS = {
     }}
 }
 
-# ================== 📱 发送微信通知 ==================
+# ================== 📱 发送微信通知（Server酱）==================
 def send_wechat(title, content):
     key = os.getenv("SERVERCHAN_KEY")
     if not key:
@@ -35,35 +37,50 @@ def send_wechat(title, content):
     url = f"https://sctapi.ftqq.com/{key}.send"
     try:
         res = requests.post(url, data={'title': title, 'desp': content})
-        if res.status_code == 200:
+        if res.status_code == 200 and '"code":0' in res.text:
             print("✅ 微信推送成功")
         else:
             print(f"❌ 推送失败: {res.text}")
     except Exception as e:
         print(f"❌ 发送微信出错: {e}")
 
-# ================== 📧 发送精美 HTML 邮件 ==================
-def send_email(title, html_content):
-    user = os.getenv("EMAIL_USER")
-    password = os.getenv("EMAIL_PASSWORD")
-    
-    if not user or not password:
-        print("❌ 未设置 EMAIL_USER 或 EMAIL_PASSWORD")
-        return
+# ================== 📧 邮件配置（SendCloud 专用）==================
+EMAIL_CONFIG = {
+    'api_user': os.getenv('SENDCLOUD_API_USER') or 'sc_jn0c10_test_Ke8GLn',  # 从 Secrets 读取
+    'api_key': os.getenv('SENDCLOUD_API_KEY') or 'f3f8c1801863fad9dfba1a58c707c6e9',  # 从 Secrets 读取
+    'sender': 'bjlmwpf@163.com',  # 必须是已验证的发件邮箱
+    'receivers': ['bjlmwpf@163.com', '18810296859@163.com'],
+    'smtp_server': 'smtp.sendcloud.net',
+    'smtp_port': 25  # 推荐使用 25 + TLS，避免 SSL 冲突
+}
 
-    msg = MIMEText(html_content, 'html', 'utf-8')
-    msg['From'] = Header(user)
-    msg['To'] = Header(user)
-    msg['Subject'] = Header(title)
-
+# ================== 📨 发送精美 HTML 邮件（SendCloud 版）==================
+def send_email(subject, html_content):
     try:
-        server = smtplib.SMTP_SSL('smtp.163.com', 465)
-        server.login(user, password)
-        server.sendmail(user, [user], msg.as_string())
+        msg = MIMEMultipart('alternative')
+        msg['From'] = f"股票机器人 <{EMAIL_CONFIG['sender']}>"
+        msg['To'] = ", ".join(EMAIL_CONFIG['receivers'])
+        msg['Subject'] = Header(subject, 'utf-8')
+
+        part = MIMEText(html_content, 'html', 'utf-8')
+        msg.attach(part)
+
+        print(f"📧 正在连接 SendCloud: {EMAIL_CONFIG['smtp_server']}:{EMAIL_CONFIG['smtp_port']}...")
+        server = smtplib.SMTP(EMAIL_CONFIG['smtp_server'], EMAIL_CONFIG['smtp_port'])
+        server.starttls()  # 启用 TLS 加密（比 SSL 更兼容）
+        print("🔐 正在登录 SendCloud...")
+        server.login(EMAIL_CONFIG['api_user'], EMAIL_CONFIG['api_key'])
+        print("✅ 登录成功")
+
+        server.sendmail(EMAIL_CONFIG['sender'], EMAIL_CONFIG['receivers'], msg.as_string())
         server.quit()
-        print("✅ 邮件发送成功！")
+        print(f"✅ 邮件发送成功！收件人: {', '.join(EMAIL_CONFIG['receivers'])}")
+    except smtplib.SMTPAuthenticationError as e:
+        print(f"❌ SendCloud 认证失败，请检查 API User 或 API Key: {e}")
+    except smtplib.SMTPConnectError as e:
+        print(f"❌ 连接 SendCloud 失败，请检查网络或端口: {e}")
     except Exception as e:
-        print(f"❌ 邮件发送失败: {e}")
+        print(f"❌ 发送邮件时发生未知错误: {type(e).__name__}: {e}")
 
 # ================== 🌐 获取股价 ==================
 def get_price(code):
@@ -75,8 +92,8 @@ def get_price(code):
         data = res.text.split('~')
         if len(data) > 3:
             return float(data[3])
-    except:
-        pass
+    except Exception as e:
+        print(f"⚠️ 获取 {code} 股价失败: {e}")
     return 3.00  # 失败返回默认价
 
 # ================== 🗃️ 读取历史价格 ==================
@@ -115,14 +132,14 @@ def calc_profit():
         yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
         last_close = None
 
-        # 查找最近一个非今天的收盘价
-        for i in range(1, 8):  # 向前查7天（避免周末）
+        # 查找最近一个非今天的收盘价（最多查7天前）
+        for i in range(1, 8):
             check_date = (datetime.now() - timedelta(days=i)).strftime('%Y-%m-%d')
             if code in history and check_date in history[code]:
                 last_close = history[code][check_date]['close']
                 break
 
-        # 如果没有历史数据，用当前价作为“昨日价”（首次运行）
+        # 若无历史数据，用当前价作为“昨日价”
         if last_close is None:
             last_close = price
 
@@ -144,8 +161,8 @@ def calc_profit():
             'price': price,
             'shares': shares,
             'cost': cost,
-            'daily_profit': daily_profit,  # 新增
-            'last_close': last_close        # 新增
+            'daily_profit': daily_profit,
+            'last_close': last_close
         }
         total_cost += cost
         total_profit += profit
@@ -288,9 +305,8 @@ if __name__ == "__main__":
     title = f"📊 双股日报 | 合计{total_profit:+,.2f}元"
 
     # 发送微信
-    print(wechat_content)
     send_wechat(title, wechat_content)
 
-    # 发送 HTML 邮件
+    # 发送 HTML 邮件（SendCloud）
     html_email = create_html_content(data, total_profit, total_rate, total_daily_profit)
     send_email(title, html_email)
