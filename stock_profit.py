@@ -22,7 +22,7 @@ STOCKS = {
         '国信': {'shares': 43300, 'cost': 3.507},
         '东方': {'shares': 163600, 'cost': 2.926}
     }},
-    '00767': {'name': '晋控电力', 'prefix': 'sz', 'holdings': {
+    '000767': {'name': '晋控电力', 'prefix': 'sz', 'holdings': {
         '中信': {'shares': 26700, 'cost': 3.00},
         '国信': {'shares': 26200, 'cost': 3.05}
     }}
@@ -180,14 +180,14 @@ def create_html_content(data, total_profit, total_rate, total_daily_profit):
     stock_rows = ""
     colors = {
         '601991': '#66bb6a' if data['601991']['profit'] >= 0 else '#ef5350',
-        '00767': '#66bb6a' if data['00767']['profit'] >= 0 else '#ef5350'
+        '000767': '#66bb6a' if data['000767']['profit'] >= 0 else '#ef5350'
     }
     daily_colors = {
         '601991': '#4caf50' if data['601991']['daily_profit'] >= 0 else '#f44336',
-        '00767': '#4caf50' if data['00767']['daily_profit'] >= 0 else '#f44336'
+        '000767': '#4caf50' if data['000767']['daily_profit'] >= 0 else '#f44336'
     }
     
-    for code in ['601991', '00767']:
+    for code in ['601991', '000767']:
         d = data[code]
         icon = '📈' if d['profit'] >= 0 else '📉'
         daily_icon = '🟢' if d['daily_profit'] >= 0 else '🔴'
@@ -286,11 +286,11 @@ if __name__ == "__main__":
 - 涨幅: {data['601991']['rate']:+.2f}%
 - 📅 当日盈利: {data['601991']['daily_profit']:+,.2f} 元
 
-💡 **{data['00767']['name']}**
-- 累计盈利: {data['00767']['profit']:+,.2f} 元
-- 当前股价: {data['00767']['price']:.2f} 元
-- 涨幅: {data['00767']['rate']:+.2f}%
-- 📅 当日盈利: {data['00767']['daily_profit']:+,.2f} 元
+💡 **{data['000767']['name']}**
+- 累计盈利: {data['000767']['profit']:+,.2f} 元
+- 当前股价: {data['000767']['price']:.2f} 元
+- 涨幅: {data['000767']['rate']:+.2f}%
+- 📅 当日盈利: {data['000767']['daily_profit']:+,.2f} 元
 
 🔥 **合计总收益**
 - 累计: {total_profit:+,.2f} 元
@@ -310,3 +310,4 @@ if __name__ == "__main__":
     # 发送 HTML 邮件（SendCloud）
     html_email = create_html_content(data, total_profit, total_rate, total_daily_profit)
     send_email(title, html_email)
+
