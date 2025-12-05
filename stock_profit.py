@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-股票盈利监控系统 - GitHub Actions 版 (增加当日盈亏计算)
+股票盈利监控系统 - GitHub Actions 版 (优化版)
 """
 
 import requests
@@ -109,7 +109,8 @@ def calc_profit():
             'shares': shares,
             'cost': cost,
             'today_profit': today_profit,
-            'yesterday_price': yesterday_price
+            'yesterday_price': yesterday_price,
+            'price_change': price - yesterday_price
         }
         total_cost += cost
         total_profit += profit
@@ -131,15 +132,20 @@ if __name__ == "__main__":
     new_yesterday_prices = {code: stock_data['price'] for code, stock_data in data.items()}
     save_yesterday_prices(new_yesterday_prices)
 
+    # 判断是否首次运行（所有股票的昨日价格等于当前价格）
+    all_first_run = all(abs(stock['price'] - stock['yesterday_price']) < 0.01 for stock in data.values())
+    first_run_note = " (首次运行，无昨日对比)" if all_first_run else ""
+
     # 微信消息
     content = f"""
-📈 **股票盈利日报**
+📈 **股票盈利日报{first_run_note}**
 
 💰 **{data['601991']['name']}**
 - 累计盈利: {data['601991']['profit']:+,.2f} 元
 - 当日盈亏: {data['601991']['today_profit']:+,.2f} 元
 - 当前股价: {data['601991']['price']:.2f} 元
 - 昨收: {data['601991']['yesterday_price']:.2f} 元
+- 涨跌: {data['601991']['price_change']:+.2f} 元 ({data['601991']['price_change']/data['601991']['yesterday_price']*100:+.2f}%)
 - 涨幅: {data['601991']['rate']:+.2f}%
 
 💡 **{data['000767']['name']}**
@@ -147,6 +153,7 @@ if __name__ == "__main__":
 - 当日盈亏: {data['000767']['today_profit']:+,.2f} 元
 - 当前股价: {data['000767']['price']:.2f} 元
 - 昨收: {data['000767']['yesterday_price']:.2f} 元
+- 涨跌: {data['000767']['price_change']:+.2f} 元 ({data['000767']['price_change']/data['000767']['yesterday_price']*100:+.2f}%)
 - 涨幅: {data['000767']['rate']:+.2f}%
 
 🛡️ **{data['601319']['name']}**
@@ -154,6 +161,7 @@ if __name__ == "__main__":
 - 当日盈亏: {data['601319']['today_profit']:+,.2f} 元
 - 当前股价: {data['601319']['price']:.2f} 元
 - 昨收: {data['601319']['yesterday_price']:.2f} 元
+- 涨跌: {data['601319']['price_change']:+.2f} 元 ({data['601319']['price_change']/data['601319']['yesterday_price']*100:+.2f}%)
 - 涨幅: {data['601319']['rate']:+.2f}%
 
 🔥 **合计总收益**
@@ -169,3 +177,6 @@ if __name__ == "__main__":
 
     print(content)
     send_wechat(title, content)
+
+
+
