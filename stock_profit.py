@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-股票盈利监控系统 - GitHub Actions 版
+股票盈利监控系统 - GitHub Actions 版 (增加当日盈亏计算)
 """
 
 import requests
 import os
-from datetime import datetime
+import json
+from datetime import datetime, timedelta
 
 # ================== 📌 股票配置 ==================
 STOCKS = {
@@ -25,6 +26,27 @@ STOCKS = {
         '加仓2': {'shares': 7000, 'cost': 8.58}
     }}
 }
+
+# ================== 💾 本地存储收盘价 ==================
+def save_yesterday_prices(prices):
+    """保存昨日收盘价到本地文件"""
+    file_path = "yesterday_prices.json"
+    try:
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(prices, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"❌ 保存昨日价格失败: {e}")
+
+def load_yesterday_prices():
+    """从本地文件加载昨日收盘价"""
+    file_path = "yesterday_prices.json"
+    try:
+        if os.path.exists(file_path):
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"❌ 加载昨日价格失败: {e}")
+    return {}
 
 # ================== 📱 Server 酱推送 ==================
 def send_wechat(title, content):
@@ -61,6 +83,10 @@ def calc_profit():
     results = {}
     total_cost = 0
     total_profit = 0
+    today_profit_total = 0
+    
+    # 获取昨日收盘价
+    yesterday_prices = load_yesterday_prices()
 
     for code, cfg in STOCKS.items():
         holdings = cfg['holdings']
@@ -70,6 +96,10 @@ def calc_profit():
         value = shares * price
         profit = value - cost
         rate = (profit / cost) * 100 if cost else 0
+        
+        # 计算当日盈亏
+        yesterday_price = yesterday_prices.get(code, price)  # 如果没有昨日价格，则用当前价格
+        today_profit = (price - yesterday_price) * shares
 
         results[code] = {
             'name': cfg['name'],
@@ -77,21 +107,29 @@ def calc_profit():
             'rate': rate,
             'price': price,
             'shares': shares,
-            'cost': cost
+            'cost': cost,
+            'today_profit': today_profit,
+            'yesterday_price': yesterday_price
         }
         total_cost += cost
         total_profit += profit
+        today_profit_total += today_profit
 
     total_rate = (total_profit / total_cost) * 100 if total_cost else 0
+    today_rate = (today_profit_total / total_cost) * 100 if total_cost else 0
 
-    return results, total_profit, total_rate
+    return results, total_profit, total_rate, today_profit_total, today_rate
 
 # ================== 🏁 主程序 ==================
 if __name__ == "__main__":
     print("🔍 开始获取股票数据...")
 
-    data, total_profit, total_rate = calc_profit()
+    data, total_profit, total_rate, today_profit_total, today_rate = calc_profit()
     now = datetime.now().strftime('%Y-%m-%d %H:%M')
+    
+    # 更新昨日收盘价
+    new_yesterday_prices = {code: stock_data['price'] for code, stock_data in data.items()}
+    save_yesterday_prices(new_yesterday_prices)
 
     # 微信消息
     content = f"""
@@ -99,30 +137,35 @@ if __name__ == "__main__":
 
 💰 **{data['601991']['name']}**
 - 累计盈利: {data['601991']['profit']:+,.2f} 元
+- 当日盈亏: {data['601991']['today_profit']:+,.2f} 元
 - 当前股价: {data['601991']['price']:.2f} 元
+- 昨收: {data['601991']['yesterday_price']:.2f} 元
 - 涨幅: {data['601991']['rate']:+.2f}%
 
 💡 **{data['000767']['name']}**
 - 累计盈利: {data['000767']['profit']:+,.2f} 元
+- 当日盈亏: {data['000767']['today_profit']:+,.2f} 元
 - 当前股价: {data['000767']['price']:.2f} 元
+- 昨收: {data['000767']['yesterday_price']:.2f} 元
 - 涨幅: {data['000767']['rate']:+.2f}%
 
 🛡️ **{data['601319']['name']}**
 - 累计盈利: {data['601319']['profit']:+,.2f} 元
+- 当日盈亏: {data['601319']['today_profit']:+,.2f} 元
 - 当前股价: {data['601319']['price']:.2f} 元
+- 昨收: {data['601319']['yesterday_price']:.2f} 元
 - 涨幅: {data['601319']['rate']:+.2f}%
 
 🔥 **合计总收益**
 - 累计: {total_profit:+,.2f} 元
+- 当日盈亏: {today_profit_total:+,.2f} 元
 - 盈利率: {total_rate:+.2f}%
+- 当日盈利率: {today_rate:+.2f}%
 
 📅 {now}
     """
 
-    title = f"📊 三股日报 | 合计{total_profit:+,.2f}元"
+    title = f"📊 三股日报 | 总{total_profit:+,.2f}元 | 当日{today_profit_total:+,.2f}元"
 
     print(content)
     send_wechat(title, content)
-
-
-
