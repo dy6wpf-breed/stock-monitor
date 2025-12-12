@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-股票盈利监控系统 - GitHub Actions 版 (优化版)
+股票盈利监控系统 - GitHub Actions 无状态优化版
 """
 
 import requests
 import os
-import json
 from datetime import datetime, timedelta
 
-# ================== 📌 股票配置 ==================
+# ================== 📌 股票配置 (已更新) ==================
 STOCKS = {
     '601991': {'name': '大唐发电', 'prefix': 'sh', 'holdings': {
         '中信': {'shares': 186700, 'cost': 3.272},
@@ -23,40 +22,24 @@ STOCKS = {
         '中信': {'shares': 2900, 'cost': 8.502},
         '国信': {'shares': 2300, 'cost': 8.503},
         '加仓1': {'shares': 9300, 'cost': 8.59},
-        '加仓2': {'shares': 7000, 'cost': 8.58}
+        '加仓2': {'shares': 7000, 'cost': 8.58},
+        # === 今日新增买入 ===
+        '加仓3': {'shares': 1000, 'cost': 8.335},
+        '加仓4': {'shares': 400, 'cost': 8.330},
+        '加仓5': {'shares': 1300, 'cost': 8.330}
     }}
 }
 
-# ================== 💾 本地存储收盘价 ==================
-def save_yesterday_prices(prices):
-    """保存昨日收盘价到本地文件"""
-    file_path = "yesterday_prices.json"
-    try:
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(prices, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        print(f"❌ 保存昨日价格失败: {e}")
-
-def load_yesterday_prices():
-    """从本地文件加载昨日收盘价"""
-    file_path = "yesterday_prices.json"
-    try:
-        if os.path.exists(file_path):
-            with open(file_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
-    except Exception as e:
-        print(f"❌ 加载昨日价格失败: {e}")
-    return {}
-
 # ================== 📱 Server 酱推送 ==================
 def send_wechat(title, content):
-    key = os.getenv("SERVERCHAN_KEY")  # 从 Secrets 读取
+    key = os.getenv("SERVERCHAN_KEY")
     if not key:
-        print("❌ 未设置 SERVERCHAN_KEY")
+        print("❌ 未设置 SERVERCHAN_KEY，跳过推送")
         return
     url = f"https://sctapi.ftqq.com/{key}.send"
     try:
-        res = requests.post(url, data={'title': title, 'desp': content})
+        data = {'title': title, 'desp': content}
+        res = requests.post(url, data=data)
         if res.status_code == 200:
             print("✅ 微信推送成功")
         else:
@@ -64,119 +47,103 @@ def send_wechat(title, content):
     except Exception as e:
         print(f"❌ 发送微信出错: {e}")
 
-# ================== 🌐 获取股价 ==================
-def get_price(code):
-    info = STOCKS[code]
-    url = f"http://qt.gtimg.cn/q={info['prefix']}{code}"
+# ================== 🌐 获取股价数据 ==================
+def get_stock_data(code, prefix):
+    """
+    返回: (当前价格, 昨日收盘价)
+    """
+    url = f"http://qt.gtimg.cn/q={prefix}{code}"
     try:
         res = requests.get(url, timeout=10)
         res.encoding = 'gbk'
+        # 数据格式: 名字~代码~当前价~昨收~开盘~成交量...
+        # 索引: 0:未知, 1:名字, 2:代码, 3:当前价, 4:昨收价
         data = res.text.split('~')
-        if len(data) > 3:
-            return float(data[3])
-    except:
-        pass
-    return 3.00  # 失败返回默认价
+        if len(data) > 4:
+            current_price = float(data[3])
+            yesterday_close = float(data[4])
+            return current_price, yesterday_close
+    except Exception as e:
+        print(f"获取 {code} 失败: {e}")
+    return 0.0, 0.0
 
 # ================== 📊 计算盈利 ==================
 def calc_profit():
-    results = {}
+    stock_details = [] # 用于存储每只股票的详情文本
     total_cost = 0
     total_profit = 0
-    today_profit_total = 0
+    total_today_profit = 0
     
-    # 获取昨日收盘价
-    yesterday_prices = load_yesterday_prices()
-
     for code, cfg in STOCKS.items():
+        # 1. 计算持仓数据
         holdings = cfg['holdings']
         shares = sum(h['shares'] for h in holdings.values())
         cost = sum(h['shares'] * h['cost'] for h in holdings.values())
-        price = get_price(code)
-        value = shares * price
-        profit = value - cost
-        rate = (profit / cost) * 100 if cost else 0
         
-        # 计算当日盈亏
-        yesterday_price = yesterday_prices.get(code, price)  # 如果没有昨日价格，则用当前价格
-        today_profit = (price - yesterday_price) * shares
+        # 2. 获取实时行情
+        price, yesterday_price = get_stock_data(code, cfg['prefix'])
+        
+        if price == 0: # 获取失败处理
+            stock_details.append(f"⚠️ **{cfg['name']}** 获取数据失败")
+            continue
 
-        results[code] = {
-            'name': cfg['name'],
-            'profit': profit,
-            'rate': rate,
-            'price': price,
-            'shares': shares,
-            'cost': cost,
-            'today_profit': today_profit,
-            'yesterday_price': yesterday_price,
-            'price_change': price - yesterday_price
-        }
+        # 3. 计算各项指标
+        value = shares * price
+        profit = value - cost # 总盈亏
+        profit_rate = (profit / cost) * 100 if cost else 0
+        
+        today_diff = price - yesterday_price # 股价涨跌额
+        today_profit = today_diff * shares   # 当日盈亏额
+        today_pct = (today_diff / yesterday_price) * 100 if yesterday_price else 0 # 当日涨跌幅
+
+        # 4. 汇总数据
         total_cost += cost
         total_profit += profit
-        today_profit_total += today_profit
+        total_today_profit += today_profit
 
+        # 5. 生成单只股票文本
+        emoji = "🔴" if today_profit >= 0 else "🟢" # 红涨绿跌
+        detail = (
+            f"{emoji} **{cfg['name']}**\n"
+            f"- 累计盈利: {profit:+,.0f} 元 ({profit_rate:+.2f}%)\n"
+            f"- 当日盈亏: {today_profit:+,.0f} 元\n"
+            f"- 现价/昨收: {price:.2f} / {yesterday_price:.2f}\n"
+            f"- 今日涨跌: {today_diff:+.2f} ({today_pct:+.2f}%)\n"
+            f"- 持仓/成本: {shares:,} / {cost/shares:.3f}\n" 
+        )
+        stock_details.append(detail)
+
+    # 计算总指标
     total_rate = (total_profit / total_cost) * 100 if total_cost else 0
-    today_rate = (today_profit_total / total_cost) * 100 if total_cost else 0
+    total_today_rate = (total_today_profit / total_cost) * 100 if total_cost else 0
 
-    return results, total_profit, total_rate, today_profit_total, today_rate
+    return stock_details, total_profit, total_rate, total_today_profit, total_today_rate
 
 # ================== 🏁 主程序 ==================
 if __name__ == "__main__":
-    print("🔍 开始获取股票数据...")
-
-    data, total_profit, total_rate, today_profit_total, today_rate = calc_profit()
-    now = datetime.now().strftime('%Y-%m-%d %H:%M')
+    print("🔍 开始计算...")
     
-    # 更新昨日收盘价
-    new_yesterday_prices = {code: stock_data['price'] for code, stock_data in data.items()}
-    save_yesterday_prices(new_yesterday_prices)
-
-    # 判断是否首次运行（所有股票的昨日价格等于当前价格）
-    all_first_run = all(abs(stock['price'] - stock['yesterday_price']) < 0.01 for stock in data.values())
-    first_run_note = " (首次运行，无昨日对比)" if all_first_run else ""
-
-    # 微信消息
+    details, tot_prof, tot_rate, day_prof, day_rate = calc_profit()
+    
+    # 获取北京时间
+    beijing_time = (datetime.utcnow() + timedelta(hours=8)).strftime('%Y-%m-%d %H:%M')
+    
+    # 标题
+    title = f"📊 盈亏日报 | 总{tot_prof:+,.0f} | 今日{day_prof:+,.0f}"
+    
+    # 内容拼接
     content = f"""
-📈 **股票盈利日报{first_run_note}**
+📅 时间: {beijing_time}
 
-💰 **{data['601991']['name']}**
-- 累计盈利: {data['601991']['profit']:+,.2f} 元
-- 当日盈亏: {data['601991']['today_profit']:+,.2f} 元
-- 当前股价: {data['601991']['price']:.2f} 元
-- 昨收: {data['601991']['yesterday_price']:.2f} 元
-- 涨跌: {data['601991']['price_change']:+.2f} 元 ({data['601991']['price_change']/data['601991']['yesterday_price']*100:+.2f}%)
-- 涨幅: {data['601991']['rate']:+.2f}%
+🔥 **账户总览**
+- 累计总盈亏: **{tot_prof:+,.2f}** 元
+- 累计收益率: {tot_rate:+.2f}%
+- **今日总盈亏: {day_prof:+,.2f} 元**
+- 今日收益率: {day_rate:+.2f}%
 
-💡 **{data['000767']['name']}**
-- 累计盈利: {data['000767']['profit']:+,.2f} 元
-- 当日盈亏: {data['000767']['today_profit']:+,.2f} 元
-- 当前股价: {data['000767']['price']:.2f} 元
-- 昨收: {data['000767']['yesterday_price']:.2f} 元
-- 涨跌: {data['000767']['price_change']:+.2f} 元 ({data['000767']['price_change']/data['000767']['yesterday_price']*100:+.2f}%)
-- 涨幅: {data['000767']['rate']:+.2f}%
-
-🛡️ **{data['601319']['name']}**
-- 累计盈利: {data['601319']['profit']:+,.2f} 元
-- 当日盈亏: {data['601319']['today_profit']:+,.2f} 元
-- 当前股价: {data['601319']['price']:.2f} 元
-- 昨收: {data['601319']['yesterday_price']:.2f} 元
-- 涨跌: {data['601319']['price_change']:+.2f} 元 ({data['601319']['price_change']/data['601319']['yesterday_price']*100:+.2f}%)
-- 涨幅: {data['601319']['rate']:+.2f}%
-
-🔥 **合计总收益**
-- 累计: {total_profit:+,.2f} 元
-- 当日盈亏: {today_profit_total:+,.2f} 元
-- 盈利率: {total_rate:+.2f}%
-- 当日盈利率: {today_rate:+.2f}%
-
-📅 {now}
+---
+{''.join(details)}
     """
-
-    title = f"📊 三股日报 | 总{total_profit:+,.2f}元 | 当日{today_profit_total:+,.2f}元"
-
+    
     print(content)
     send_wechat(title, content)
-
-
-
