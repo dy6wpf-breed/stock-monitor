@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-股票盈利监控系统 - GitHub Actions 无状态优化版
+股票盈利监控系统 - GitHub Actions 无状态优化版 (排版修复)
 """
 
 import requests
 import os
 from datetime import datetime, timedelta
 
-# ================== 📌 股票配置 (已更新) ==================
+# ================== 📌 股票配置 ==================
 STOCKS = {
     '601991': {'name': '大唐发电', 'prefix': 'sh', 'holdings': {
         '中信': {'shares': 186700, 'cost': 3.272},
@@ -69,47 +69,50 @@ def get_stock_data(code, prefix):
 
 # ================== 📊 计算盈利 ==================
 def calc_profit():
-    stock_details = [] # 用于存储每只股票的详情文本
+    stock_details = [] 
     total_cost = 0
     total_profit = 0
     total_today_profit = 0
     
     for code, cfg in STOCKS.items():
-        # 1. 计算持仓数据
+        # 1. 计算持仓
         holdings = cfg['holdings']
         shares = sum(h['shares'] for h in holdings.values())
         cost = sum(h['shares'] * h['cost'] for h in holdings.values())
         
-        # 2. 获取实时行情
+        # 2. 获取行情
         price, yesterday_price = get_stock_data(code, cfg['prefix'])
         
-        if price == 0: # 获取失败处理
-            stock_details.append(f"⚠️ **{cfg['name']}** 获取数据失败")
+        if price == 0: 
+            stock_details.append(f"⚠️ **{cfg['name']}** 获取数据失败\n")
             continue
 
-        # 3. 计算各项指标
+        # 3. 计算指标
         value = shares * price
-        profit = value - cost # 总盈亏
+        profit = value - cost
         profit_rate = (profit / cost) * 100 if cost else 0
         
-        today_diff = price - yesterday_price # 股价涨跌额
-        today_profit = today_diff * shares   # 当日盈亏额
-        today_pct = (today_diff / yesterday_price) * 100 if yesterday_price else 0 # 当日涨跌幅
+        today_diff = price - yesterday_price
+        today_profit = today_diff * shares
+        today_pct = (today_diff / yesterday_price) * 100 if yesterday_price else 0
 
-        # 4. 汇总数据
+        # 4. 汇总
         total_cost += cost
         total_profit += profit
         total_today_profit += today_profit
 
-        # 5. 生成单只股票文本
-        emoji = "🔴" if today_profit >= 0 else "🟢" # 红涨绿跌
+        # 5. 生成单只股票文本 (优化了换行)
+        emoji = "🔴" if today_profit >= 0 else "🟢"
+        
+        # 使用更紧凑但有分隔的格式
         detail = (
             f"{emoji} **{cfg['name']}**\n"
-            f"- 累计盈利: {profit:+,.0f} 元 ({profit_rate:+.2f}%)\n"
-            f"- 当日盈亏: {today_profit:+,.0f} 元\n"
+            f"- 累计盈利: `{profit:+,.0f}` ({profit_rate:+.2f}%)\n"
+            f"- 当日盈亏: `{today_profit:+,.0f}`\n"
             f"- 现价/昨收: {price:.2f} / {yesterday_price:.2f}\n"
             f"- 今日涨跌: {today_diff:+.2f} ({today_pct:+.2f}%)\n"
-            f"- 持仓/成本: {shares:,} / {cost/shares:.3f}\n" 
+            f"- 持仓/成本: {shares:,} / {cost/shares:.3f}\n"
+            f"\n" # <--- 关键修改：强制双换行，确保微信里有空行分隔
         )
         stock_details.append(detail)
 
@@ -125,21 +128,19 @@ if __name__ == "__main__":
     
     details, tot_prof, tot_rate, day_prof, day_rate = calc_profit()
     
-    # 获取北京时间
     beijing_time = (datetime.utcnow() + timedelta(hours=8)).strftime('%Y-%m-%d %H:%M')
     
-    # 标题
     title = f"📊 盈亏日报 | 总{tot_prof:+,.0f} | 今日{day_prof:+,.0f}"
     
-    # 内容拼接
+    # 内容拼接 (优化了分割线)
     content = f"""
-📅 时间: {beijing_time}
+📅 {beijing_time}
 
 🔥 **账户总览**
 - 累计总盈亏: **{tot_prof:+,.2f}** 元
-- 累计收益率: {tot_rate:+.2f}%
-- **今日总盈亏: {day_prof:+,.2f} 元**
-- 今日收益率: {day_rate:+.2f}%
+- 累计收益率: **{tot_rate:+.2f}%**
+- 今日总盈亏: **{day_prof:+,.2f}** 元
+- 今日收益率: **{day_rate:+.2f}%**
 
 ---
 {''.join(details)}
