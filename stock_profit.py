@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-股票盈利监控系统 - GitHub Actions 无状态优化版 (排版修复)
+股票盈利监控系统 - GitHub Actions 无状态优化版 (含中航机载)
 """
 
 import requests
@@ -27,11 +27,17 @@ STOCKS = {
         '加仓3': {'shares': 1000, 'cost': 8.335},
         '加仓4': {'shares': 400, 'cost': 8.330},
         '加仓5': {'shares': 1300, 'cost': 8.330}
+    }},
+    # === 新增股票 ===
+    '600372': {'name': '中航机载', 'prefix': 'sh', 'holdings': {
+        '买入1': {'shares': 5000, 'cost': 13.132},
+        '买入2': {'shares': 7700, 'cost': 13.001}
     }}
 }
 
 # ================== 📱 Server 酱推送 ==================
 def send_wechat(title, content):
+    # GitHub Actions 中需在 Settings -> Secrets 配置 SERVERCHAN_KEY
     key = os.getenv("SERVERCHAN_KEY")
     if not key:
         print("❌ 未设置 SERVERCHAN_KEY，跳过推送")
