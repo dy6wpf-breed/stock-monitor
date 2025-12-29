@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-股票盈利监控系统 - GitHub Actions 无状态优化版 (含中航机载)
+股票盈利监控系统 - GitHub Actions 无状态优化版 (含新筑股份)
 """
 
 import requests
@@ -23,15 +23,14 @@ STOCKS = {
         '国信': {'shares': 2300, 'cost': 8.503},
         '加仓1': {'shares': 9300, 'cost': 8.59},
         '加仓2': {'shares': 7000, 'cost': 8.58},
-        # === 今日新增买入 ===
         '加仓3': {'shares': 1000, 'cost': 8.335},
         '加仓4': {'shares': 400, 'cost': 8.330},
         '加仓5': {'shares': 1300, 'cost': 8.330}
     }},
     # === 新增股票 ===
-    '600372': {'name': '中航机载', 'prefix': 'sh', 'holdings': {
-        '买入1': {'shares': 5000, 'cost': 13.132},
-        '买入2': {'shares': 7700, 'cost': 13.001}
+    '002480': {'name': '新筑股份', 'prefix': 'sz', 'holdings': {
+        '买入1': {'shares': 16000, 'cost': 6.290},
+        '买入2': {'shares': 16100, 'cost': 6.300}
     }}
 }
 
