@@ -1,13 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-股票盈利监控系统 - GitHub Actions 无状态优化版 (人保清仓，加仓新筑)
+股票盈利监控系统 - GitHub Actions (双股清仓收益统计版)
 """
 
 import requests
 import os
 from datetime import datetime, timedelta
 
-# ================== 📌 股票配置 ==================
+# ================== 💰 已落袋收益 (已卖出的钱) ==================
+# 1. 中国人保: +32,942
+# 2. 中航机载: +1,491 (卖出价13.17算)
+REALIZED_PROFIT = 32942 + 1491  # 总计: 34,433 元
+
+# ================== 📌 现有持仓配置 ==================
 STOCKS = {
     '601991': {'name': '大唐发电', 'prefix': 'sh', 'holdings': {
         '中信': {'shares': 186700, 'cost': 3.272},
@@ -18,9 +23,6 @@ STOCKS = {
         '中信': {'shares': 30100, 'cost': 2.998},
         '国信': {'shares': 11600, 'cost': 3.042}
     }},
-    # === 中国人保已清仓 ===
-    
-    # === 新筑股份 (含加仓) ===
     '002480': {'name': '新筑股份', 'prefix': 'sz', 'holdings': {
         '底仓1': {'shares': 16000, 'cost': 6.290},
         '底仓2': {'shares': 16100, 'cost': 6.300},
@@ -31,63 +33,47 @@ STOCKS = {
 
 # ================== 📱 Server 酱推送 ==================
 def send_wechat(title, content):
-    # GitHub Actions 中需在 Settings -> Secrets 配置 SERVERCHAN_KEY
     key = os.getenv("SERVERCHAN_KEY")
     if not key:
-        print("❌ 未设置 SERVERCHAN_KEY，跳过推送")
+        print("❌ 未设置 SERVERCHAN_KEY")
         return
     url = f"https://sctapi.ftqq.com/{key}.send"
     try:
-        data = {'title': title, 'desp': content}
-        res = requests.post(url, data=data)
-        if res.status_code == 200:
-            print("✅ 微信推送成功")
-        else:
-            print(f"❌ 推送失败: {res.text}")
+        requests.post(url, data={'title': title, 'desp': content})
+        print("✅ 微信推送成功")
     except Exception as e:
-        print(f"❌ 发送微信出错: {e}")
+        print(f"❌ 推送失败: {e}")
 
-# ================== 🌐 获取股价数据 ==================
+# ================== 🌐 获取股价 ==================
 def get_stock_data(code, prefix):
-    """
-    返回: (当前价格, 昨日收盘价)
-    """
-    url = f"http://qt.gtimg.cn/q={prefix}{code}"
     try:
+        url = f"http://qt.gtimg.cn/q={prefix}{code}"
         res = requests.get(url, timeout=10)
-        res.encoding = 'gbk'
-        # 数据格式: 名字~代码~当前价~昨收~开盘~成交量...
-        # 索引: 0:未知, 1:名字, 2:代码, 3:当前价, 4:昨收价
         data = res.text.split('~')
         if len(data) > 4:
-            current_price = float(data[3])
-            yesterday_close = float(data[4])
-            return current_price, yesterday_close
-    except Exception as e:
-        print(f"获取 {code} 失败: {e}")
+            return float(data[3]), float(data[4]) # 现价, 昨收
+    except:
+        pass
     return 0.0, 0.0
 
 # ================== 📊 计算盈利 ==================
 def calc_profit():
     stock_details = [] 
-    total_cost = 0
-    total_profit = 0
+    holdings_cost = 0   # 现有持仓成本
+    holdings_profit = 0 # 现有持仓浮盈
     total_today_profit = 0
     
     for code, cfg in STOCKS.items():
-        # 1. 计算持仓
+        # 1. 持仓数据
         holdings = cfg['holdings']
         shares = sum(h['shares'] for h in holdings.values())
         cost = sum(h['shares'] * h['cost'] for h in holdings.values())
         
-        # 2. 获取行情
+        # 2. 实时股价
         price, yesterday_price = get_stock_data(code, cfg['prefix'])
-        
-        if price == 0: 
-            stock_details.append(f"⚠️ **{cfg['name']}** 获取数据失败\n")
-            continue
+        if price == 0: continue
 
-        # 3. 计算指标
+        # 3. 计算单只数据
         value = shares * price
         profit = value - cost
         profit_rate = (profit / cost) * 100 if cost else 0
@@ -96,49 +82,51 @@ def calc_profit():
         today_profit = today_diff * shares
         today_pct = (today_diff / yesterday_price) * 100 if yesterday_price else 0
 
-        # 4. 汇总
-        total_cost += cost
-        total_profit += profit
+        # 4. 累加
+        holdings_cost += cost
+        holdings_profit += profit
         total_today_profit += today_profit
 
-        # 5. 生成单只股票文本
+        # 5. 格式化输出
         emoji = "🔴" if today_profit >= 0 else "🟢"
-        
-        detail = (
+        stock_details.append(
             f"{emoji} **{cfg['name']}**\n"
             f"- 累计盈利: `{profit:+,.0f}` ({profit_rate:+.2f}%)\n"
             f"- 当日盈亏: `{today_profit:+,.0f}`\n"
-            f"- 现价/昨收: {price:.2f} / {yesterday_price:.2f}\n"
-            f"- 今日涨跌: {today_diff:+.2f} ({today_pct:+.2f}%)\n"
-            f"- 持仓/成本: {shares:,} / {cost/shares:.3f}\n"
-            f"\n"
+            f"- 现价: {price:.2f} ({today_pct:+.2f}%)\n"
+            f"- 持仓: {shares:,}\n\n"
         )
-        stock_details.append(detail)
 
-    # 计算总指标
-    total_rate = (total_profit / total_cost) * 100 if total_cost else 0
-    total_today_rate = (total_today_profit / total_cost) * 100 if total_cost else 0
+    # === 核心逻辑：总收益 = 现有持仓浮盈 + 已落袋收益 ===
+    final_total_profit = holdings_profit + REALIZED_PROFIT
+    
+    # 现有持仓收益率
+    current_yield = (holdings_profit / holdings_cost * 100) if holdings_cost else 0
 
-    return stock_details, total_profit, total_rate, total_today_profit, total_today_rate
+    return stock_details, final_total_profit, holdings_profit, current_yield, total_today_profit
 
 # ================== 🏁 主程序 ==================
 if __name__ == "__main__":
-    print("🔍 开始计算...")
+    details, final_tot, float_prof, yield_rate, day_prof = calc_profit()
     
-    details, tot_prof, tot_rate, day_prof, day_rate = calc_profit()
+    time_str = (datetime.utcnow() + timedelta(hours=8)).strftime('%m-%d %H:%M')
     
-    beijing_time = (datetime.utcnow() + timedelta(hours=8)).strftime('%Y-%m-%d %H:%M')
+    # 标题
+    title = f"📊 账户日报 | 总{final_tot:+,.0f} | 今日{day_prof:+,.0f}"
     
-    title = f"📊 盈亏日报 | 总{tot_prof:+,.0f} | 今日{day_prof:+,.0f}"
-    
+    # 内容
     content = f"""
-📅 {beijing_time}
+📅 {time_str}
 
-🔥 **账户总览**
-- 累计总盈亏: **{tot_prof:+,.2f}** 元
-- 累计收益率: **{tot_rate:+.2f}%**
-- 今日总盈亏: **{day_prof:+,.2f}** 元
-- 今日收益率: **{day_rate:+.2f}%**
+💰 **资金总览**
+- **账户总盈亏: {final_tot:+,.0f} 元** (含落袋)
+- 现有持仓浮盈: {float_prof:+,.0f} 元
+- 现有持仓收益率: {yield_rate:+.2f}%
+- 今日浮动盈亏: {day_prof:+,.0f} 元
+
+👜 **已落袋收益 (+{REALIZED_PROFIT:,})**
+- 中国人保: +32,942 元
+- 中航机载: +1,491 元
 
 ---
 {''.join(details)}
