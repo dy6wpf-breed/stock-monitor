@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-股票盈利监控系统 - GitHub Actions 无状态优化版 (含新筑股份)
+股票盈利监控系统 - GitHub Actions 无状态优化版 (人保清仓，加仓新筑)
 """
 
 import requests
@@ -18,19 +18,14 @@ STOCKS = {
         '中信': {'shares': 30100, 'cost': 2.998},
         '国信': {'shares': 11600, 'cost': 3.042}
     }},
-    '601319': {'name': '中国人保', 'prefix': 'sh', 'holdings': {
-        '中信': {'shares': 2900, 'cost': 8.502},
-        '国信': {'shares': 2300, 'cost': 8.503},
-        '加仓1': {'shares': 9300, 'cost': 8.59},
-        '加仓2': {'shares': 7000, 'cost': 8.58},
-        '加仓3': {'shares': 1000, 'cost': 8.335},
-        '加仓4': {'shares': 400, 'cost': 8.330},
-        '加仓5': {'shares': 1300, 'cost': 8.330}
-    }},
-    # === 新增股票 ===
+    # === 中国人保已清仓 ===
+    
+    # === 新筑股份 (含加仓) ===
     '002480': {'name': '新筑股份', 'prefix': 'sz', 'holdings': {
-        '买入1': {'shares': 16000, 'cost': 6.290},
-        '买入2': {'shares': 16100, 'cost': 6.300}
+        '底仓1': {'shares': 16000, 'cost': 6.290},
+        '底仓2': {'shares': 16100, 'cost': 6.300},
+        '加仓1': {'shares': 18700, 'cost': 6.350},
+        '加仓2': {'shares': 17400, 'cost': 6.350}
     }}
 }
 
@@ -106,10 +101,9 @@ def calc_profit():
         total_profit += profit
         total_today_profit += today_profit
 
-        # 5. 生成单只股票文本 (优化了换行)
+        # 5. 生成单只股票文本
         emoji = "🔴" if today_profit >= 0 else "🟢"
         
-        # 使用更紧凑但有分隔的格式
         detail = (
             f"{emoji} **{cfg['name']}**\n"
             f"- 累计盈利: `{profit:+,.0f}` ({profit_rate:+.2f}%)\n"
@@ -117,7 +111,7 @@ def calc_profit():
             f"- 现价/昨收: {price:.2f} / {yesterday_price:.2f}\n"
             f"- 今日涨跌: {today_diff:+.2f} ({today_pct:+.2f}%)\n"
             f"- 持仓/成本: {shares:,} / {cost/shares:.3f}\n"
-            f"\n" # <--- 关键修改：强制双换行，确保微信里有空行分隔
+            f"\n"
         )
         stock_details.append(detail)
 
@@ -137,7 +131,6 @@ if __name__ == "__main__":
     
     title = f"📊 盈亏日报 | 总{tot_prof:+,.0f} | 今日{day_prof:+,.0f}"
     
-    # 内容拼接 (优化了分割线)
     content = f"""
 📅 {beijing_time}
 
