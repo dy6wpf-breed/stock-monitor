@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-股票盈利监控系统 - GitHub Actions v3.9 (全聚德清仓/电建进场版)
+股票盈利监控系统 - GitHub Actions v3.9 (人保大幅加仓版)
 """
 
 import requests
 import os
 from datetime import datetime, timedelta
 
-# ================== 💰 已落袋收益 (含全聚德割肉损益) ==================
-# 历史落袋: 28,014 | 全聚德清仓: -37,752
+# ================== 💰 已落袋收益统计 ==================
 REALIZED_PROFIT = -9738 
 
 # ================== 📌 现有持仓配置 ==================
@@ -19,11 +18,11 @@ STOCKS = {
         '东方': {'shares': 163600, 'cost': 2.871}
     }},
     '601319': {'name': '中国人保', 'prefix': 'sh', 'holdings': {
-        '中信': {'shares': 9900, 'cost': 9.181},
-        '国信': {'shares': 9500, 'cost': 9.281},
-        '东方': {'shares': 1100, 'cost': 9.205}
+        '买入1': {'shares': 9900, 'cost': 9.181},
+        '买入2': {'shares': 9500, 'cost': 9.281},
+        '买入3': {'shares': 1100, 'cost': 9.205},
+        '加仓': {'shares': 19300, 'cost': 8.58}  # <--- 今日新增加仓
     }},
-    # === 新买入: 中国电建 ===
     '601669': {'name': '中国电建', 'prefix': 'sh', 'holdings': {
         '买入1': {'shares': 33300, 'cost': 5.731},
         '买入2': {'shares': 37700, 'cost': 5.741}
@@ -46,7 +45,7 @@ def get_stock_data(code, prefix):
         res = requests.get(url, timeout=10)
         data = res.text.split('~')
         if len(data) > 32:
-            return float(data[3]), float(data[4]), float(data[32]) # 现价, 昨收, 涨跌幅
+            return float(data[3]), float(data[4]), float(data[32])
     except: pass
     return 0.0, 0.0, 0.0
 
@@ -56,7 +55,6 @@ def calc_profit():
     holdings_cost = 0
     holdings_profit = 0
     total_today_profit = 0
-    total_market_value = 0
     
     for code, cfg in STOCKS.items():
         shares = sum(h['shares'] for h in cfg['holdings'].values())
@@ -72,7 +70,6 @@ def calc_profit():
         holdings_cost += cost
         holdings_profit += profit
         total_today_profit += daily
-        total_market_value += value
 
         emoji = "🔺" if daily >= 0 else "🔹"
         stock_details.append(
@@ -95,7 +92,7 @@ if __name__ == "__main__":
 ## 📊 账户核心概览
 - **总盈亏 (含落袋)**: **{final_tot:+,.2f}** 元
 - **今日总变动**: **{day_prof:+,.2f}** 元
-- 现有持仓浮盈: {float_prof:+,.2f} 元
+- 现有持仓浮盈: {float_prof:+,.0f} 元
 - 历史落袋盈亏: {REALIZED_PROFIT:+,.0f} 元
 
 ---
