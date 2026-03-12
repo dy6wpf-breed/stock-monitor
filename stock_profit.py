@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-股票盈利监控系统 - GitHub Actions v3.9 (人保大幅加仓版)
+股票盈利监控系统 - GitHub Actions v4.1 (三账户截图精准对齐版)
 """
 
 import requests
@@ -8,24 +8,25 @@ import os
 from datetime import datetime, timedelta
 
 # ================== 💰 已落袋收益统计 ==================
-REALIZED_PROFIT = -9738 
+# 1. 历史落袋(含全聚德清仓): -9,738
+# 2. 大唐发电减仓盈利: +148,314
+REALIZED_PROFIT = 138576 
 
-# ================== 📌 现有持仓配置 ==================
+# ================== 📌 现有持仓配置 (依据三账户截图) ==================
 STOCKS = {
     '601991': {'name': '大唐发电', 'prefix': 'sh', 'holdings': {
-        '中信': {'shares': 186700, 'cost': 3.217},
-        '国信': {'shares': 43300, 'cost': 3.452},
-        '东方': {'shares': 163600, 'cost': 2.871}
+        '东方财富': {'shares': 141700, 'cost': 2.607}, # 截图1
+        '中信建投': {'shares': 132100, 'cost': 2.655}, # 截图2
+        '国信证券': {'shares': 43300,  'cost': 3.452}  # 截图3
     }},
     '601319': {'name': '中国人保', 'prefix': 'sh', 'holdings': {
-        '买入1': {'shares': 9900, 'cost': 9.181},
-        '买入2': {'shares': 9500, 'cost': 9.281},
-        '买入3': {'shares': 1100, 'cost': 9.205},
-        '加仓': {'shares': 19300, 'cost': 8.58}  # <--- 今日新增加仓
+        '东方财富': {'shares': 1100,   'cost': 9.205}, # 截图1
+        '中信建投': {'shares': 17600,  'cost': 8.918}, # 截图2
+        '国信证券': {'shares': 21100,  'cost': 8.896}  # 截图3
     }},
     '601669': {'name': '中国电建', 'prefix': 'sh', 'holdings': {
-        '买入1': {'shares': 33300, 'cost': 5.731},
-        '买入2': {'shares': 37700, 'cost': 5.741}
+        '中信建投': {'shares': 33300,  'cost': 5.731}, # 截图2
+        '国信证券': {'shares': 37700,  'cost': 5.741}  # 截图3
     }}
 }
 
@@ -76,8 +77,7 @@ def calc_profit():
             f"### {emoji} {cfg['name']} ({code})\n"
             f"- **当前盈亏**: `{profit:+,.0f}` ({ (profit/cost*100):+.2f}%)\n"
             f"- **今日变动**: `{daily:+,.0f}` ({pct:+.2f}%)\n"
-            f"- **价格信息**: 现价 `{price:.2f}` / 成本 `{cost/shares:.3f}`\n"
-            f"- **市值持仓**: `{shares:,}` 股 / `{value:,.0f}` 元\n\n"
+            f"- **行情**: 现价 `{price:.2f}` / 成本 `{cost/shares:.3f}`\n\n"
         )
 
     return stock_details, holdings_profit + REALIZED_PROFIT, total_today_profit, holdings_profit
@@ -96,7 +96,7 @@ if __name__ == "__main__":
 - 历史落袋盈亏: {REALIZED_PROFIT:+,.0f} 元
 
 ---
-## 👜 详细持仓清单
+## 👜 持仓清单
 {''.join(details)}
 
 📅 生成时间: {time_str}
