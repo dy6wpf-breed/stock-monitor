@@ -1,32 +1,36 @@
 # -*- coding: utf-8 -*-
 """
-股票盈利监控系统 - GitHub Actions v4.1 (三账户截图精准对齐版)
+股票盈利监控系统 - GitHub Actions v5.0 (大唐清仓/换仓爱尔+中化)
 """
 
 import requests
 import os
 from datetime import datetime, timedelta
 
-# ================== 💰 已落袋收益统计 ==================
-# 1. 历史落袋(含全聚德清仓): -9,738
-# 2. 大唐发电减仓盈利: +148,314
-REALIZED_PROFIT = 138576 
+# ================== 💰 已落袋收益统计 (大唐发电清仓后) ==================
+# 1. 历史落袋: 138,576
+# 2. 大唐发电清仓盈利: +625,941
+REALIZED_PROFIT = 764517 
 
-# ================== 📌 现有持仓配置 (依据三账户截图) ==================
+# ================== 📌 现有持仓配置 ==================
 STOCKS = {
-    '601991': {'name': '大唐发电', 'prefix': 'sh', 'holdings': {
-        '东方财富': {'shares': 141700, 'cost': 2.607}, # 截图1
-        '中信建投': {'shares': 132100, 'cost': 2.655}, # 截图2
-        '国信证券': {'shares': 43300,  'cost': 3.452}  # 截图3
-    }},
     '601319': {'name': '中国人保', 'prefix': 'sh', 'holdings': {
-        '东方财富': {'shares': 1100,   'cost': 9.205}, # 截图1
-        '中信建投': {'shares': 17600,  'cost': 8.918}, # 截图2
-        '国信证券': {'shares': 21100,  'cost': 8.896}  # 截图3
+        '东方财富': {'shares': 1100,   'cost': 9.205},
+        '中信建投': {'shares': 17600,  'cost': 8.918},
+        '国信证券': {'shares': 21100,  'cost': 8.896}
     }},
     '601669': {'name': '中国电建', 'prefix': 'sh', 'holdings': {
-        '中信建投': {'shares': 33300,  'cost': 5.731}, # 截图2
-        '国信证券': {'shares': 37700,  'cost': 5.741}  # 截图3
+        '中信建投': {'shares': 33300,  'cost': 5.731},
+        '国信证券': {'shares': 37700,  'cost': 5.741}
+    }},
+    # === 新成员: 爱尔眼科 (创业板 sz) ===
+    '300015': {'name': '爱尔眼科', 'prefix': 'sz', 'holdings': {
+        '国信证券': {'shares': 5900,   'cost': 10.190}
+    }},
+    # === 新成员: 中化国际 (沪市 sh) ===
+    '600500': {'name': '中化国际', 'prefix': 'sh', 'holdings': {
+        '中信建投': {'shares': 84200,  'cost': 4.973},
+        '国信证券': {'shares': 41200,  'cost': 4.970}
     }}
 }
 
@@ -75,7 +79,7 @@ def calc_profit():
         emoji = "🔺" if daily >= 0 else "🔹"
         stock_details.append(
             f"### {emoji} {cfg['name']} ({code})\n"
-            f"- **当前盈亏**: `{profit:+,.0f}` ({ (profit/cost*100):+.2f}%)\n"
+            f"- **当前浮盈**: `{profit:+,.0f}` ({ (profit/cost*100):+.2f}%)\n"
             f"- **今日变动**: `{daily:+,.0f}` ({pct:+.2f}%)\n"
             f"- **行情**: 现价 `{price:.2f}` / 成本 `{cost/shares:.3f}`\n\n"
         )
@@ -87,16 +91,15 @@ if __name__ == "__main__":
     details, final_tot, day_prof, float_prof = calc_profit()
     time_str = (datetime.utcnow() + timedelta(hours=8)).strftime('%m-%d %H:%M')
     
-    title = f"📈 账户日报: {final_tot:+,.0f} | 今日 {day_prof:+,.0f}"
+    title = f"📈 换仓日报: {final_tot:+,.0f} | 盈: {final_tot-764247:+,.0f}" # 这里的盈是以昨日总额为基准
     content = f"""
 ## 📊 账户核心概览
 - **总盈亏 (含落袋)**: **{final_tot:+,.2f}** 元
-- **今日总变动**: **{day_prof:+,.2f}** 元
-- 现有持仓浮盈: {float_prof:+,.0f} 元
-- 历史落袋盈亏: {REALIZED_PROFIT:+,.0f} 元
+- **今日浮动变动**: **{day_prof:+,.2f}** 元
+- 历史落袋总额: {REALIZED_PROFIT:+,.0f} 元
 
 ---
-## 👜 持仓清单
+## 👜 新持仓清单
 {''.join(details)}
 
 📅 生成时间: {time_str}
