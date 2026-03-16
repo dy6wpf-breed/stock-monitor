@@ -1,18 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-股票盈利监控系统 - GitHub Actions v5.0 (大唐清仓/换仓爱尔+中化)
+股票盈利监控系统 - GitHub Actions v5.1 (补仓摊薄/新进中铁版)
 """
 
 import requests
 import os
 from datetime import datetime, timedelta
 
-# ================== 💰 已落袋收益统计 (大唐发电清仓后) ==================
-# 1. 历史落袋: 138,576
-# 2. 大唐发电清仓盈利: +625,941
+# ================== 💰 已落袋收益统计 ==================
 REALIZED_PROFIT = 764517 
 
-# ================== 📌 现有持仓配置 ==================
+# ================== 📌 现有持仓配置 (依据今日补仓成交更新) ==================
 STOCKS = {
     '601319': {'name': '中国人保', 'prefix': 'sh', 'holdings': {
         '东方财富': {'shares': 1100,   'cost': 9.205},
@@ -23,14 +21,17 @@ STOCKS = {
         '中信建投': {'shares': 33300,  'cost': 5.731},
         '国信证券': {'shares': 37700,  'cost': 5.741}
     }},
-    # === 新成员: 爱尔眼科 (创业板 sz) ===
     '300015': {'name': '爱尔眼科', 'prefix': 'sz', 'holdings': {
-        '国信证券': {'shares': 5900,   'cost': 10.190}
+        '国信证券': {'shares': 15700,  'cost': 10.196} # 补仓摊平
     }},
-    # === 新成员: 中化国际 (沪市 sh) ===
     '600500': {'name': '中化国际', 'prefix': 'sh', 'holdings': {
-        '中信建投': {'shares': 84200,  'cost': 4.973},
-        '国信证券': {'shares': 41200,  'cost': 4.970}
+        '中信建投': {'shares': 105000, 'cost': 4.939}, # 补仓摊平
+        '国信证券': {'shares': 62200,  'cost': 4.913}  # 补仓摊平
+    }},
+    # === 新成员: 中国中铁 ===
+    '601390': {'name': '中国中铁', 'prefix': 'sh', 'holdings': {
+        '中信建投': {'shares': 60600,  'cost': 5.822},
+        '国信证券': {'shares': 68300,  'cost': 5.835}
     }}
 }
 
@@ -79,7 +80,7 @@ def calc_profit():
         emoji = "🔺" if daily >= 0 else "🔹"
         stock_details.append(
             f"### {emoji} {cfg['name']} ({code})\n"
-            f"- **当前浮盈**: `{profit:+,.0f}` ({ (profit/cost*100):+.2f}%)\n"
+            f"- **当前盈亏**: `{profit:+,.0f}` ({ (profit/cost*100):+.2f}%)\n"
             f"- **今日变动**: `{daily:+,.0f}` ({pct:+.2f}%)\n"
             f"- **行情**: 现价 `{price:.2f}` / 成本 `{cost/shares:.3f}`\n\n"
         )
@@ -91,15 +92,15 @@ if __name__ == "__main__":
     details, final_tot, day_prof, float_prof = calc_profit()
     time_str = (datetime.utcnow() + timedelta(hours=8)).strftime('%m-%d %H:%M')
     
-    title = f"📈 换仓日报: {final_tot:+,.0f} | 盈: {final_tot-764247:+,.0f}" # 这里的盈是以昨日总额为基准
+    title = f"📈 补仓日报: {final_tot:+,.0f} | 浮盈 {float_prof:+,.0f}"
     content = f"""
 ## 📊 账户核心概览
 - **总盈亏 (含落袋)**: **{final_tot:+,.2f}** 元
 - **今日浮动变动**: **{day_prof:+,.2f}** 元
-- 历史落袋总额: {REALIZED_PROFIT:+,.0f} 元
+- 累计落袋收益: {REALIZED_PROFIT:+,.0f} 元
 
 ---
-## 👜 新持仓清单
+## 👜 补仓后持仓清单
 {''.join(details)}
 
 📅 生成时间: {time_str}
