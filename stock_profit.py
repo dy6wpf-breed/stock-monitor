@@ -1,33 +1,28 @@
 # -*- coding: utf-8 -*-
 """
-股票盈利监控系统 - GitHub Actions v6.0 (全仓换股电建版)
+股票盈利监控系统 - GitHub Actions v6.2 (人保全清/全仓电建最终版)
 """
 
 import requests
 import os
 from datetime import datetime, timedelta
 
-# ================== 💰 已落袋收益统计 (经本次大换仓核算) ==================
-# 历史落袋: 764,517
-# 减去: 人保割肉(-1.4万), 中铁割肉(-3.2万), 中化部分割肉(-1.4万)
-# 加上: 爱尔眼科微利(+0.1万)
-REALIZED_PROFIT = 705062 
+# ================== 💰 已落袋收益统计 ==================
+# 包含历次清仓损益，本次扣除人保最后余仓割肉约 688 元
+REALIZED_PROFIT = 704374 
 
-# ================== 📌 现有持仓配置 (依据最新截图) ==================
+# ================== 📌 现有持仓配置 ==================
 STOCKS = {
-    # 1. 中国电建 (目前的绝对核心)
+    # 中国电建 (三账户全线持仓)
     '601669': {'name': '中国电建', 'prefix': 'sh', 'holdings': {
         '中信建投': {'shares': 136500, 'cost': 5.953}, 
-        '国信证券': {'shares': 100000, 'cost': 5.975}
+        '国信证券': {'shares': 100000, 'cost': 5.975},
+        '东方财富': {'shares': 1500,   'cost': 6.070}
     }},
-    # 2. 中化国际 (剩余持仓)
+    # 中化国际
     '600500': {'name': '中化国际', 'prefix': 'sh', 'holdings': {
         '中信建投': {'shares': 75000,  'cost': 5.128},
         '国信证券': {'shares': 62200,  'cost': 4.913}
-    }},
-    # 3. 中国人保 (东方财富还有极少量)
-    '601319': {'name': '中国人保', 'prefix': 'sh', 'holdings': {
-        '东方财富': {'shares': 1100,   'cost': 9.205}
     }}
 }
 
@@ -85,17 +80,18 @@ if __name__ == "__main__":
     details, final_tot, day_prof, float_prof = calc_profit()
     time_str = (datetime.utcnow() + timedelta(hours=8)).strftime('%m-%d %H:%M')
     
-    title = f"🚀 调仓完毕: {final_tot:+,.0f} | 现盈 {float_prof:+,.0f}"
+    title = f"🚀 全仓电建: {final_tot:+,.0f} | 盈 {final_tot-633053:+,.0f}"
     content = f"""
-## 📊 账户大换仓概览
+## 📊 账户最新概览
 - **总盈亏 (含落袋)**: **{final_tot:+,.2f}** 元
-- **持仓浮动变动**: **{day_prof:+,.2f}** 元
-- 历史落袋收益: {REALIZED_PROFIT:+,.0f} 元
+- **今日总变动**: **{day_prof:+,.2f}** 元
+- 现有浮动盈亏: {float_prof:+,.2f} 元
+- 累计落袋收益: {REALIZED_PROFIT:+,.0f} 元
 
 ---
-## 👜 当前重仓清单
+## 👜 现有持仓清单
 {''.join(details)}
 
-📅 生成时间: {time_str}
+📅 更新时间: {time_str}
     """
     send_wechat(title, content)
