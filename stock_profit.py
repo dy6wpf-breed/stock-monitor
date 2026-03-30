@@ -1,90 +1,119 @@
 # -*- coding: utf-8 -*-
 """
-股票盈利监控系统 - GitHub Actions v7.0 (极致孤注一掷：全仓电建版)
+股票盈利统计系统 v7.3 - 精准对账版
+(根据中信/国信最新截图修正：总持仓 40.09 万股)
 """
 
-import requests
+import pandas as pd
+from datetime import datetime
 import os
-from datetime import datetime, timedelta
+import smtplib
+import requests
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.header import Header
 
 # ================== 💰 已落袋收益统计 ==================
-# 包含历次清仓损益，本次扣除中化国际全额割肉约 9.47 万
 REALIZED_PROFIT = 609633 
 
-# ================== 📌 现有持仓配置 (极致集中) ==================
+# ================== 📌 现有持仓配置 (依据最新截图精准更新) ==================
 STOCKS = {
-    '601669': {'name': '中国电建', 'prefix': 'sh', 'holdings': {
-        '中信建投': {'shares': 191600, 'cost': 5.938}, 
-        '国信证券': {'shares': 145700, 'cost': 5.951},
-        '东方财富': {'shares': 1500,   'cost': 6.070}
-    }}
+    '601669': {
+        'name': '中国电建',
+        'holdings': {
+            '中信建投': {'shares': 191600, 'cost': 5.938}, # 对应截图1
+            '国信证券': {'shares': 209300, 'cost': 5.963}  # 对应截图2：大幅加仓后
+        },
+        'prefix': 'sh'
+    }
 }
 
-# ================== 📱 Server 酱推送 ==================
-def send_wechat(title, content):
-    key = os.getenv("SERVERCHAN_KEY")
-    if not key: return
-    url = f"https://sctapi.ftqq.com/{key}.send"
-    try:
-        requests.post(url, data={'title': title, 'desp': content})
-    except: pass
+# ================== 📧 通讯配置 ==================
+EMAIL_CONFIG = {
+    'sender': 'bjlmwpf@163.com',
+    'password': 'RVSeJdxea8UKw8AS',
+    'receivers': ['bjlmwpf@163.com', '18810296859@163.com'],
+    'smtp_server': 'smtp.163.com',
+    'smtp_port': 465
+}
+SERVERCHAN_SENDKEY = "SCT301051TaXqp0xNoZ458CWFsj31BI3At"
 
-def get_stock_data(code, prefix):
-    url = f"http://qt.gtimg.cn/q={prefix}{code}"
+def get_stock_price_tencent(stock_code):
+    stock_info = STOCKS[stock_code]
+    url = f"http://qt.gtimg.cn/q={stock_info['prefix']}{stock_code}"
     try:
-        res = requests.get(url, timeout=10)
-        data = res.text.split('~')
+        response = requests.get(url, timeout=15)
+        response.encoding = 'gbk'
+        data = response.text.split('~')
         if len(data) > 32:
-            return float(data[3]), float(data[4]), float(data[32])
+            return {'current': float(data[3]), 'yesterday_close': float(data[4]), 'pct_change': float(data[32])}
     except: pass
-    return 0.0, 0.0, 0.0
+    return {'current': 0, 'yesterday_close': 0, 'pct_change': 0}
 
-def calc_profit():
-    stock_details = [] 
-    holdings_cost = 0
-    holdings_profit = 0
-    total_today_profit = 0
-    
-    for code, cfg in STOCKS.items():
-        shares = sum(h['shares'] for h in cfg['holdings'].values())
-        cost = sum(h['shares'] * h['cost'] for h in cfg['holdings'].values())
-        price, yesterday, pct = get_stock_data(code, cfg['prefix'])
-        
-        if price == 0: continue
-        
-        value = shares * price
-        profit = value - cost
-        daily = (price - yesterday) * shares
-        
-        holdings_cost += cost
-        holdings_profit += profit
-        total_today_profit += daily
+def process_data():
+    all_data = {}
+    total_mv = 0
+    total_floating_profit = 0
+    total_daily_profit = 0
+    for code, config in STOCKS.items():
+        price_data = get_stock_price_tencent(code)
+        shares = sum(h['shares'] for h in config['holdings'].values())
+        cost_sum = sum(h['shares'] * h['cost'] for h in config['holdings'].values())
+        mv = shares * price_data['current']
+        profit = mv - cost_sum
+        daily = shares * (price_data['current'] - price_data['yesterday_close'])
+        all_data[code] = {
+            'name': config['name'], 'price': price_data['current'], 'shares': shares,
+            'cost_avg': cost_sum / shares, 'value': mv, 'profit': profit,
+            'profit_rate': (profit / cost_sum * 100), 'daily_profit': daily, 
+            'daily_pct': price_data['pct_change']
+        }
+        total_mv += mv
+        total_floating_profit += profit
+        total_daily_profit += daily
+    return all_data, total_mv, total_floating_profit, total_daily_profit
 
-        emoji = "🔺" if daily >= 0 else "🔹"
-        stock_details.append(
-            f"### {emoji} {cfg['name']} ({code})\n"
-            f"- **当前浮盈**: `{profit:+,.0f}` ({ (profit/cost*100):+.2f}%)\n"
-            f"- **今日变动**: `{daily:+,.0f}` ({pct:+.2f}%)\n"
-            f"- **价格**: `{price:.2f}` / 摊薄成本 `{cost/shares:.3f}`\n\n"
-        )
+def send_deep_wechat(all_data, final_profit, daily_profit, floating_profit, total_mv):
+    title = f"📊 账户对账日报: {final_profit:+,.0f}"
+    stock_md = ""
+    for code, d in all_data.items():
+        stock_md += f"### 🔹 {d['name']} ({code})\n- **当前浮盈**: `{d['profit']:+,.0f}`\n- **现价/成本**: `{d['price']:.3f}` / `{d['cost_avg']:.3f}`\n- **最新持仓**: `{d['shares']:,}` 股\n---"
+    desp = f"## 💰 资产快报\n- **总损益**: **{final_profit:+,.2f}**\n- **总市值**: {total_mv:,.0f}\n\n> 浮盈: {floating_profit:+,.0f}\n> 落袋: {REALIZED_PROFIT:+,.0f}\n\n{stock_md}"
+    requests.post(f"https://sctapi.ftqq.com/{SERVERCHAN_SENDKEY}.send", data={'title': title, 'desp': desp})
 
-    return stock_details, holdings_profit + REALIZED_PROFIT, total_today_profit, holdings_profit
+def create_fancy_email(all_data, total_mv, final_profit, daily_profit, total_floating):
+    rows = ""
+    for code, d in all_data.items():
+        p_color = "#e64340" if d['profit'] >= 0 else "#09bb07"
+        rows += f"""<tr style="border-bottom: 1px solid #f0f0f0;">
+            <td style="padding: 20px 10px;"><b>{d['name']}</b><br><small>{code}</small></td>
+            <td style="padding: 20px 10px; text-align: right;">{d['price']:.3f}<br><small>成本: {d['cost_avg']:.3f}</small></td>
+            <td style="padding: 20px 10px; text-align: right; color: {p_color}; font-weight: bold;">{d['profit']:+,.0f}</td>
+            <td style="padding: 20px 10px; text-align: right;">{d['value']:,.0f}</td>
+            <td style="padding: 20px 10px; text-align: right;">{d['shares']:,}</td></tr>"""
+    return f"""<html><body style="background:#f2f4f7; padding:20px; font-family: sans-serif;">
+        <div style="max-width:800px; margin:auto; background:white; border-radius:12px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+            <div style="background:#1c1c1e; padding:40px; color:white; text-align:center;">
+                <div style="opacity:0.6; font-size:14px;">账户总盈亏 (含历史落袋)</div>
+                <div style="font-size:42px; font-weight:bold;">{final_profit:+,.2f}</div>
+            </div>
+            <div style="padding:25px;">
+                <table width="100%" cellspacing="0" style="border-collapse: collapse;">
+                    <thead><tr style="text-align: right; font-size: 12px; color: #999; border-bottom: 2px solid #f0f0f0;"><th align="left" style="padding: 10px;">持仓</th><th style="padding: 10px;">现价/成本</th><th style="padding: 10px;">盈亏额</th><th style="padding: 10px;">市值</th><th style="padding: 10px;">股数</th></tr></thead>
+                    <tbody>{rows}</tbody>
+                </table>
+                <div style="margin-top:20px; font-size:12px; color:#999;">持仓浮盈: {total_floating:+,.0f} | 历史落袋: {REALIZED_PROFIT:+,.0f}</div>
+            </div>
+        </div></body></html>"""
 
 if __name__ == "__main__":
-    details, final_tot, day_prof, float_prof = calc_profit()
-    time_str = (datetime.utcnow() + timedelta(hours=8)).strftime('%m-%d %H:%M')
-    
-    title = f"📈 绝地反击: {final_tot:+,.0f} | 今日 {day_prof:+,.0f}"
-    content = f"""
-## 📊 极致持仓概览
-- **总盈亏 (含落袋)**: **{final_tot:+,.2f}** 元
-- **持仓总市值**: { (final_tot - REALIZED_PROFIT + sum(sum(h['shares']*h['cost'] for h in v['holdings'].values()) for v in STOCKS.values())):+,.0f} 元
-- 累计落袋收益: {REALIZED_PROFIT:+,.0f} 元
-
----
-## 👜 现有持仓清单 (全仓电建)
-{''.join(details)}
-
-📅 更新时间: {time_str}
-    """
-    send_wechat(title, content)
+    all_data, total_mv, total_floating, total_daily = process_data()
+    final_profit = total_floating + REALIZED_PROFIT
+    send_deep_wechat(all_data, final_profit, total_daily, total_floating, total_mv)
+    msg = MIMEMultipart(); msg['Subject'] = Header(f"📊 修正后资产报表 | {final_profit:+,.0f}"); msg['From'] = Header(EMAIL_CONFIG['sender']); msg['To'] = Header(', '.join(EMAIL_CONFIG['receivers']))
+    msg.attach(MIMEText(create_fancy_email(all_data, total_mv, final_profit, total_daily, total_floating), 'html', 'utf-8'))
+    try:
+        server = smtplib.SMTP_SSL(EMAIL_CONFIG['smtp_server'], EMAIL_CONFIG['smtp_port'])
+        server.login(EMAIL_CONFIG['sender'], EMAIL_CONFIG['password']); server.sendmail(EMAIL_CONFIG['sender'], EMAIL_CONFIG['receivers'], msg.as_string()); server.quit()
+        print(f"✅ 修正版报表已发送")
+    except Exception as e: print(f"❌ 失败: {e}")
