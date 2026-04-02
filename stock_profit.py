@@ -1,18 +1,17 @@
 # -*- coding: utf-8 -*-
 """
-股票盈利监控系统 - GitHub Actions v7.3 (精准对账对齐版)
-(修正：总持仓 40.09 万股，成本对齐最新截图)
+股票盈利监控系统 - GitHub Actions v8.1 (全仓电建对齐版)
 """
 
 import requests
 import os
 from datetime import datetime, timedelta
 
-# ================== 💰 已落袋收益统计 ==================
-# 包含历次清仓损益：大唐(+77.4万)、全聚德(-3.7万)、中铁(-3.2万)、中化(-9.4万)等
+# ================== 📌 核心知识库数据 (2026-03-20 录入) ==================
+# 历史累计落袋损益: 609,633 元
 REALIZED_PROFIT = 609633 
 
-# ================== 📌 现有持仓配置 (依据最新截图精准修正) ==================
+# 现有持仓: 中国电建 (601669)
 STOCKS = {
     '601669': {'name': '中国电建', 'prefix': 'sh', 'holdings': {
         '中信建投': {'shares': 191600, 'cost': 5.938}, 
@@ -20,14 +19,22 @@ STOCKS = {
     }}
 }
 
-# ================== 📱 Server 酱推送 ==================
+# ================== 📱 推送逻辑 ==================
 def send_wechat(title, content):
-    key = os.getenv("SERVERCHAN_KEY")
-    if not key: return
-    url = f"https://sctapi.ftqq.com/{key}.send"
+    # 优先从 GitHub Secrets 获取 Key，如果没有则使用代码里的 V3 Key
+    key = os.getenv("SERVERCHAN_KEY") or "sctp19090tnwug12v5ljfqyvsgugxfrv"
+    
+    # 根据 Key 类型自动选择 URL (如果是 sctp 开头则使用 V3 专属 URL)
+    if key.startswith("sctp"):
+        url = f"https://19090.push.ft07.com/send/{key}.send"
+    else:
+        url = f"https://sctapi.ftqq.com/{key}.send"
+        
     try:
-        requests.post(url, data={'title': title, 'desp': content})
-    except: pass
+        requests.post(url, data={'title': title, 'desp': content}, timeout=15)
+        print("✅ 微信推送指令已发出")
+    except Exception as e:
+        print(f"❌ 推送失败: {e}")
 
 # ================== 🌐 获取行情逻辑 ==================
 def get_stock_data(code, prefix):
@@ -40,63 +47,54 @@ def get_stock_data(code, prefix):
     except: pass
     return 0.0, 0.0, 0.0
 
-# ================== 📊 计算盈利 ==================
+# ================== 📊 核心计算逻辑 ==================
 def calc_profit():
-    stock_details = [] 
-    holdings_cost = 0
-    holdings_profit = 0
-    total_today_profit = 0
-    total_market_value = 0
+    # 1. 获取行情
+    price_now, price_last, pct = get_stock_data('601669', 'sh')
+    if price_now == 0: return None
     
-    for code, cfg in STOCKS.items():
-        shares = sum(h['shares'] for h in cfg['holdings'].values())
-        cost = sum(h['shares'] * h['cost'] for h in cfg['holdings'].values())
-        price, yesterday, pct = get_stock_data(code, cfg['prefix'])
-        
-        if price == 0: continue
-        
-        value = shares * price
-        profit = value - cost
-        daily = (price - yesterday) * shares
-        
-        holdings_cost += cost
-        holdings_profit += profit
-        total_today_profit += daily
-        total_market_value += value
+    # 2. 持仓详情计算
+    zx_cfg = STOCKS['601669']['holdings']['中信建投']
+    gx_cfg = STOCKS['601669']['holdings']['国信证券']
+    
+    zx_prof = zx_cfg['shares'] * (price_now - zx_cfg['cost'])
+    gx_prof = gx_cfg['shares'] * (price_now - gx_cfg['cost'])
+    
+    total_shares = zx_cfg['shares'] + gx_cfg['shares']
+    total_mv = total_shares * price_now
+    total_floating = zx_prof + gx_prof
+    final_total_profit = total_floating + REALIZED_PROFIT
+    
+    # 3. 动态指标
+    daily_change = (price_now - price_last) * total_shares
+    avg_cost = ((zx_cfg['shares']*zx_cfg['cost']) + (gx_cfg['shares']*gx_cfg['cost'])) / total_shares
 
-        emoji = "🔺" if daily >= 0 else "🔹"
-        stock_details.append(
-            f"### {emoji} {cfg['name']} ({code})\n"
-            f"- **当前盈亏**: `{profit:+,.0f}` ({ (profit/cost*100):+.2f}%)\n"
-            f"- **今日变动**: `{daily:+,.0f}` ({pct:+.2f}%)\n"
-            f"- **价格信息**: 现价 `{price:.3f}` / 摊薄成本 `{cost/shares:.3f}`\n"
-            f"- **最新规模**: `{shares:,}` 股 / `{value:,.0f}` 元\n\n"
-        )
+    # 4. 构建 Markdown 内容
+    content = f"""
+## 💰 账户资产概览 (GitHub v8.1)
+- **总损益 (含落袋)**: **{final_total_profit:+,.2f}** 元
+- **持仓总市值**: **{total_mv:,.0f}** 元
+- **今日总变动**: **{daily_change:+,.2f}** 元 ({pct:+.2f}%)
 
-    return stock_details, holdings_profit + REALIZED_PROFIT, total_today_profit, holdings_profit, total_market_value
+> **资产账目明细**
+- 历史落袋盈亏: `{REALIZED_PROFIT:+,.0f}` (实钱)
+- 现有持仓浮盈: `{total_floating:+,.0f}` (浮钱)
+- 综合持仓成本: `{avg_cost:.3f}`
+
+---
+## 👜 分账户对账
+- **中信建投**: `{zx_prof:+,.0f}` ({zx_cfg['shares']:,}股)
+- **国信证券**: `{gx_prof:+,.0f}` ({gx_cfg['shares']:,}股)
+
+📅 同步时间: {(datetime.utcnow() + timedelta(hours=8)).strftime('%Y-%m-%d %H:%M')}
+"""
+    return final_total_profit, daily_change, content
 
 # ================== 🏁 主程序 ==================
 if __name__ == "__main__":
-    details, final_tot, day_prof, float_prof, total_mv = calc_profit()
-    time_str = (datetime.utcnow() + timedelta(hours=8)).strftime('%Y-%m-%d %H:%M')
-    
-    # 标题显示总盈亏
-    title = f"📈 修正日报: {final_tot:+,.0f} | 今日 {day_prof:+,.0f}"
-    
-    content = f"""
-## 💰 账户资产概览 (修正版)
-- **总损益 (含落袋)**: **{final_tot:+,.2f}** 元
-- **持仓总市值**: **{total_mv:,.0f}** 元
-- **今日总变动**: **{day_prof:+,.2f}** 元
-
-> **明细拆解**
-- 历史已实现收益: `{REALIZED_PROFIT:+,.0f}`
-- 现有持仓浮动: `{float_prof:+,.0f}`
-
----
-## 👜 现有持仓清单
-{''.join(details)}
-
-📅 数据同步时间: {time_str}
-    """
-    send_wechat(title, content)
+    result = calc_profit()
+    if result:
+        tot, day, body = result
+        send_wechat(f"🚀 资产日报: {tot:+,.0f} | 变动 {day:+,.0f}", body)
+    else:
+        print("❌ 行情获取失败，任务终止")
