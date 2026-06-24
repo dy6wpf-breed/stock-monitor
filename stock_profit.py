@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-股票盈利监控系统 - GitHub Actions v8.8 (极致纯净 & 双通道推送版)
+股票盈利监控系统 - GitHub Actions v8.9 (双通道 & 纵向排版完美版)
 更新日志：
-1. 集成原有 Secrets 动态 Key 机制与新写入的硬编码 SeedKey。
-2. 保持 v8.7 个股及分仓极致纯净版输出（只保留累计盈亏与今日盈亏）。
+1. 精准控制 Markdown 与 HTML 换行符，解决手机端微信看盘信息横向挤压、排版错乱的问题。
+2. 保持极致纯净的数据输出，个股明细区只聚焦【累计总盈亏】与【今日盈亏】。
 """
 
 import requests
@@ -46,7 +46,7 @@ def send_wechat(title, content):
     else:
         print("💡 未在 GitHub Secrets 中检测到 SERVERCHAN_KEY，将跳过此环境变量通道")
 
-    # 通道 2：您刚刚提供的全新固定 SeedKey
+    # 通道 2：固定 SeedKey
     new_seed_key = "SCT369340TItDB979ZF0vvE5MOoI5sZyci"
     keys.append(new_seed_key)
 
@@ -110,7 +110,7 @@ def calc_profit():
     total_floating = 0
     daily_change = 0
     
-    # 动态构建个股极简明细
+    # 动态构建个股明细
     stocks_md = ""
     
     for code, info in STOCKS.items():
@@ -135,23 +135,25 @@ def calc_profit():
             total_mv += mv
             daily_change += acc_daily
             
-            # 券商分仓：极致精简，只保留累计盈亏和今日盈亏
-            acc_md_lines.append(f"   • {acc_name}：累计 `{prof:+,.0f}` | 今日 `{acc_daily:+,.0f}`")
+            # 券商分仓：尾部加入 <br> 强行对齐，解决微信端横向挤压问题
+            acc_md_lines.append(f" 🏦 {acc_name}：累计 `{prof:+,.0f}` | 今日 `{acc_daily:+,.0f}` <br>")
             
         total_floating += stock_prof
         
-        # 个股看板：聚焦累计和今日两个利润指标
+        # 个股看板：剔除总市值，纵向规整排列
+        sub_accounts = "".join(acc_md_lines)
         stocks_md += f"""
 🔹 **{info['name']} ({code})** *现价: {p['now']:.2f}*
-   • 累计总盈亏：**{stock_prof:+,.0f}** 元
-   • 今日总变动：**{stock_daily_change:+,.0f}** 元
-""" + "\n".join(acc_md_lines) + "\n\n"
+* 累计总盈亏：**{stock_prof:+,.0f}** 元
+* 今日总变动：**{stock_daily_change:+,.0f}** 元
+{sub_accounts}
+"""
 
     final_profit = total_floating + REALIZED_PROFIT
 
     # 构建全局总账 Markdown 报告
     content = f"""
-# 💰 资产日报 (v8.8)
+# 💰 资产日报 (v8.9)
 
 ### 📊 核心大账本
 * **总盈亏(含落袋)**：**{final_profit:+,.2f}** 元
@@ -178,6 +180,7 @@ if __name__ == "__main__":
     result = calc_profit()
     if result:
         tot, day, body = result
+        # 保持推送标题极简直接
         title = f"📈 全局资产汇报: {tot:+,.0f} | 今日 {day:+,.0f}"
         send_wechat(title, body)
     else:
