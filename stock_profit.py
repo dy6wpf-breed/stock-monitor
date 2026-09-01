@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-股票盈利监控系统 - GitHub Actions v9.0 (多股调仓更新版)
+股票盈利监控系统 - GitHub Actions v9.1 (纯净Markdown排版修复版)
 更新日志：
-1. 计入国信证券中国电建清仓实亏，更新累计落袋利润。
-2. 更新中信建投中国电建持仓与成本。
-3. 补全新增持仓：中国人寿(601628)、农产品(000061)、有友食品(603697)。
-4. 保持微信双通道与 163 邮件推送，维持纵向整洁排版。
+1. 修复 Server酱 原样显示 <br> 的问题，改用通用 Markdown 规范换行。
+2. 确保个股【累计盈亏】、【今日变动】与【券商分仓】严格纵向单行对齐。
+3. 保持双通道推送与邮件全套财务计算逻辑。
 """
 
 import requests
@@ -125,7 +124,8 @@ def calc_profit():
             total_mv += mv
             daily_change += acc_daily
 
-            acc_md_lines.append(f" 🏦 {acc_name}：累计 `{prof:+,.0f}` | 今日 `{acc_daily:+,.0f}` <br>")
+            # 使用标准 Markdown 列表项实现稳定换行
+            acc_md_lines.append(f"  * 🏦 {acc_name}：累计 `{prof:+,.0f}` | 今日 `{acc_daily:+,.0f}`")
             account_rows.append({
                 'account': acc_name,
                 'shares': data['shares'],
@@ -147,12 +147,12 @@ def calc_profit():
             'accounts': account_rows
         })
 
-        sub_accounts = "".join(acc_md_lines)
+        sub_accounts_str = "\n".join(acc_md_lines)
         stocks_md += f"""
 🔹 **{info['name']} ({code})** *现价: {p['now']:.2f}*
 * 累计总盈亏：**{stock_prof:+,.0f}** 元
 * 今日总变动：**{stock_daily_change:+,.0f}** 元
-{sub_accounts}
+{sub_accounts_str}
 """
 
     final_profit = total_floating + REALIZED_PROFIT
@@ -166,7 +166,7 @@ def calc_profit():
     }
 
     content = f"""
-# 💰 资产日报 (v9.0)
+# 💰 资产日报 (v9.1)
 
 ### 📊 核心大账本
 * **总盈亏(含落袋)**：**{final_profit:+,.2f}** 元
