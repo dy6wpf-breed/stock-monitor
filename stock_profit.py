@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-股票盈利监控系统 - GitHub Actions v9.1 (纯净Markdown排版修复版)
+股票盈利监控系统 - GitHub Actions v9.2 (终极硬换行排版修复版)
 更新日志：
-1. 修复 Server酱 原样显示 <br> 的问题，改用通用 Markdown 规范换行。
-2. 确保个股【累计盈亏】、【今日变动】与【券商分仓】严格纵向单行对齐。
-3. 保持双通道推送与邮件全套财务计算逻辑。
+1. 修复 Markdown 列表项与标题粘连问题，全面应用行尾双空格硬换行机制。
+2. 保证手机端各券商分仓与汇总数据严格单行展示、层级分明。
 """
 
 import requests
@@ -124,8 +123,8 @@ def calc_profit():
             total_mv += mv
             daily_change += acc_daily
 
-            # 使用标准 Markdown 列表项实现稳定换行
-            acc_md_lines.append(f"  * 🏦 {acc_name}：累计 `{prof:+,.0f}` | 今日 `{acc_daily:+,.0f}`")
+            # 行尾增加两个空格实现 Markdown 标准强制换行
+            acc_md_lines.append(f"  * 🏦 {acc_name}：累计 `{prof:+,.0f}` | 今日 `{acc_daily:+,.0f}`  ")
             account_rows.append({
                 'account': acc_name,
                 'shares': data['shares'],
@@ -149,9 +148,9 @@ def calc_profit():
 
         sub_accounts_str = "\n".join(acc_md_lines)
         stocks_md += f"""
-🔹 **{info['name']} ({code})** *现价: {p['now']:.2f}*
-* 累计总盈亏：**{stock_prof:+,.0f}** 元
-* 今日总变动：**{stock_daily_change:+,.0f}** 元
+🔹 **{info['name']} ({code})** *现价: {p['now']:.2f}*  
+* 累计总盈亏：**{stock_prof:+,.0f}** 元  
+* 今日总变动：**{stock_daily_change:+,.0f}** 元  
 {sub_accounts_str}
 """
 
@@ -166,18 +165,18 @@ def calc_profit():
     }
 
     content = f"""
-# 💰 资产日报 (v9.1)
+# 💰 资产日报 (v9.2)
 
 ### 📊 核心大账本
-* **总盈亏(含落袋)**：**{final_profit:+,.2f}** 元
-* **今日总变动**：**{daily_change:+,.2f}** 元
-* **当前总市值**：{total_mv:,.0f} 元
+* **总盈亏(含落袋)**：**{final_profit:+,.2f}** 元  
+* **今日总变动**：**{daily_change:+,.2f}** 元  
+* **当前总市值**：{total_mv:,.0f} 元  
 
 ---
 
 ### 🗂️ 分类账目
-* 历史已落袋：`{REALIZED_PROFIT:+,.0f}` (实钱)
-* 持仓总浮盈：`{total_floating:+,.0f}` (浮钱)
+* 历史已落袋：`{REALIZED_PROFIT:+,.0f}` (实钱)  
+* 持仓总浮盈：`{total_floating:+,.0f}` (浮钱)  
 
 ---
 
