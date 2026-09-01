@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-股票盈利监控系统 - GitHub Actions v8.9 (双通道 & 纵向排版完美版)
+股票盈利监控系统 - GitHub Actions v9.0 (多股调仓更新版)
 更新日志：
-1. 精准控制 Markdown 与 HTML 换行符，解决手机端微信看盘信息横向挤压、排版错乱的问题。
-2. 保持极致纯净的数据输出，个股明细区只聚焦【累计总盈亏】与【今日盈亏】。
-3. 新增邮件发送功能（参考本地版）
+1. 计入国信证券中国电建清仓实亏，更新累计落袋利润。
+2. 更新中信建投中国电建持仓与成本。
+3. 补全新增持仓：中国人寿(601628)、农产品(000061)、有友食品(603697)。
+4. 保持微信双通道与 163 邮件推送，维持纵向整洁排版。
 """
 
 import requests
@@ -16,23 +17,46 @@ from email.mime.multipart import MIMEMultipart
 from email.header import Header
 
 # ================== 💰 核心财务底牌 ==================
-REALIZED_PROFIT = 609633
+# 累计落袋净利润 (609633 - 255505.52)
+REALIZED_PROFIT = 354127 
 
+# 现有持仓: 多股多账户对齐
 STOCKS = {
     '601669': {
         'name': '中国电建',
         'prefix': 'sh',
         'holdings': {
-            '中信建投': {'shares': 191600, 'cost': 5.938},
-            '国信证券': {'shares': 209300, 'cost': 5.963},
-            '东方财富': {'shares': 1500,   'cost': 6.073}
+            '中信建投': {'shares': 95800, 'cost': 7.028},
+            '东方财富': {'shares': 1500,  'cost': 6.073}
         }
     },
     '000778': {
         'name': '新兴铸管',
         'prefix': 'sz',
         'holdings': {
-            '国信证券': {'shares': 14400,  'cost': 4.180}
+            '国信证券': {'shares': 14400, 'cost': 4.106}
+        }
+    },
+    '601628': {
+        'name': '中国人寿',
+        'prefix': 'sh',
+        'holdings': {
+            '中信建投': {'shares': 500,   'cost': 38.170},
+            '国信证券': {'shares': 600,   'cost': 38.209}
+        }
+    },
+    '000061': {
+        'name': '农 产 品',
+        'prefix': 'sz',
+        'holdings': {
+            '国信证券': {'shares': 27900, 'cost': 6.521}
+        }
+    },
+    '603697': {
+        'name': '有友食品',
+        'prefix': 'sh',
+        'holdings': {
+            '国信证券': {'shares': 44200, 'cost': 9.592}
         }
     }
 }
@@ -72,10 +96,6 @@ def get_all_stock_data():
 
 # ================== 📊 核心资产计算 ==================
 def calc_profit():
-    """
-    返回 (final_profit, daily_change, content, fin_dict)
-    fin_dict 包含邮件所需的完整字段
-    """
     prices = get_all_stock_data()
     if not prices or len(prices) < len(STOCKS):
         print("❌ 行情获取不全，终止计算。")
@@ -85,7 +105,6 @@ def calc_profit():
     total_floating = 0
     daily_change = 0
     stock_details = []
-
     stocks_md = ""
 
     for code, info in STOCKS.items():
@@ -147,7 +166,7 @@ def calc_profit():
     }
 
     content = f"""
-# 💰 资产日报 (v8.9)
+# 💰 资产日报 (v9.0)
 
 ### 📊 核心大账本
 * **总盈亏(含落袋)**：**{final_profit:+,.2f}** 元
@@ -180,7 +199,7 @@ def create_fancy_email_html(fin):
             acc_rows += f"""
             <tr style="border-top:1px solid #f2f2f2; font-size:13px;">
                 <td style="padding:12px 5px;"><b>{a['account']}</b><br><small style="color:#666;">{a['shares']:,}股</small></td>
-                <td align="right" style="padding:12px 5px;">{s['now']:.3f}<br><small style="color:#666;">成本:{a['cost']}</small></td>
+                <td align="right" style="padding:12px 5px;">{s['now']:.3f}<br><small style="color:#666;">成本:{a['cost']:.3f}</small></td>
                 <td align="right" style="padding:12px 5px; color:{'#e64340' if a['prof']>=0 else '#09bb07'}; font-weight:bold;">{a['prof']:+,.0f}</td>
                 <td align="right" style="padding:12px 5px;">{(a['mv']/fin['total_mv']*100):.1f}%</td>
             </tr>"""
@@ -253,7 +272,6 @@ def create_fancy_email_html(fin):
     """
 
 def send_email(fin):
-    """发送 HTML 邮件"""
     if not EMAIL_CONFIG['password']:
         print("💡 未在 GitHub Secrets 中检测到 EMAIL_PASSWORD，跳过邮件发送")
         return
@@ -276,18 +294,14 @@ def send_email(fin):
 # ================== 📱 双 Server 酱通道配置 ==================
 def send_wechat(title, content):
     keys = []
-
     env_key = os.getenv("SERVERCHAN_KEY")
     if env_key:
         keys.append(env_key)
-    else:
-        print("💡 未在 GitHub Secrets 中检测到 SERVERCHAN_KEY，将跳过此环境变量通道")
 
     new_seed_key = "SCT369340TItDB979ZF0vvE5MOoI5sZyci"
     keys.append(new_seed_key)
 
     keys = list(set(keys))
-
     if not keys:
         print("❌ 未检测到任何可用的 SERVERCHAN_KEY，任务终止")
         return
@@ -312,11 +326,7 @@ if __name__ == "__main__":
     if result:
         tot, day, body, fin = result
         title = f"📈 全局资产汇报: {tot:+,.0f} | 今日 {day:+,.0f}"
-
-        # 微信推送
         send_wechat(title, body)
-
-        # 邮件推送
         send_email(fin)
     else:
         print("❌ 运行失败，未能成功提取核心行情")
