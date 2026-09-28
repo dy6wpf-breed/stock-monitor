@@ -1,8 +1,9 @@
 name: 每日股票监控
 on:
   schedule:
-    # 每天 15:05 (北京时间) = UTC 07:05，周一至周五
-    - cron: '5 7 * * 1-5'
+    # GitHub Actions cron 有~5h调度延迟(免费计划已知问题)
+    # 设 UTC 02:05 = 北京 10:05，加上平均~5h延迟 → 实际执行约北京 15:00-15:30 (收盘后)
+    - cron: '5 2 * * 1-5'
   workflow_dispatch:  # 允许手动触发
 
 jobs:
